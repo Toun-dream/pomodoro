@@ -542,7 +542,7 @@
     </div>
 
     <div class="card">
-      <h2>Fond d'écran <span class="eyebrow">personnalise</span></h2>
+      <h2>Fond d'écran <span class="eyebrow">personnalisé</span></h2>
       <div class="bg-options">
         <label class="bg-upload" id="bgUploadLabel">
           Cliquer pour importer une image
@@ -588,7 +588,6 @@
   setInterval(tickClock, 1000);
 
   /* ---------------- state ---------------- */
-  // MODIFICATION : Chargement des temps personnalisés sauvegardés ou par défaut
   const savedMinutes = JSON.parse(localStorage.getItem('rituel_minutes')) || { focus: 25, short: 5, long: 15 };
 
   const modes = {
@@ -731,7 +730,6 @@
     customMinutes.value = v;
     modes[currentMode].minutes = v;
     
-    // MODIFICATION : Sauvegarde des nouvelles durées personnalisées
     const minsToSave = { focus: modes.focus.minutes, short: modes.short.minutes, long: modes.long.minutes };
     localStorage.setItem('rituel_minutes', JSON.stringify(minsToSave));
 
@@ -768,7 +766,6 @@
   const taskList = document.getElementById('taskList');
   const taskProgress = document.getElementById('taskProgress');
   
-  // MODIFICATION : Chargement des tâches sauvegardées
   let tasks = JSON.parse(localStorage.getItem('rituel_tasks')) || [];
   let taskIdSeq = tasks.length > 0 ? Math.max(...tasks.map(t => t.id)) + 1 : 1;
 
@@ -806,7 +803,6 @@
     taskProgress.textContent = done + '/' + tasks.length;
   }
 
-  // MODIFICATION : Fonction utilitaire pour sauvegarder puis réafficher les tâches
   function saveAndRenderTasks() {
     localStorage.setItem('rituel_tasks', JSON.stringify(tasks));
     renderTasks();
@@ -880,15 +876,44 @@
     document.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
     if(activeEl) activeEl.classList.add('active');
     
-    // MODIFICATION : Sauvegarde de l'image de fond d'écran
-    localStorage.setItem('rituel_bg', url);
+    // Essai de sauvegarde dans le localStorage (avec sécurité si quotas dépassés)
+    try {
+      localStorage.setItem('rituel_bg', url);
+    } catch(e) {
+      console.warn("L'image est trop volumineuse pour être stockée en mémoire locale permanente.");
+    }
   }
 
+  // MODIFICATION : Compression des images importées pour contourner les limites du localStorage
   bgUpload.addEventListener('change', e => {
     const file = e.target.files[0];
     if(!file) return;
     const reader = new FileReader();
-    reader.onload = ev => setBackground(ev.target.result, null);
+    reader.onload = ev => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+        
+        // Redimensionnement max (HD standard max pour alléger le poids en pixels)
+        const MAX_WIDTH = 1280;
+        if (width > MAX_WIDTH) {
+          height = Math.round((height * MAX_WIDTH) / width);
+          width = MAX_WIDTH;
+        }
+        
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        
+        // Export en JPEG compressé (qualité 0.7) très léger et idéal pour le stockage
+        const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
+        setBackground(compressedBase64, null);
+      };
+      img.src = ev.target.result;
+    };
     reader.readAsDataURL(file);
   });
 
@@ -904,14 +929,12 @@
     bg.classList.add('no-image');
     bg.style.backgroundImage = 'none';
     document.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
-    
-    // MODIFICATION : Nettoyage de la sauvegarde du fond
     localStorage.removeItem('rituel_bg');
   });
 
-  // MODIFICATION : Restauration du fond d'écran au chargement de la page
   const savedBg = localStorage.getItem('rituel_bg');
   if (savedBg) {
+    // Si c'est un preset, ré-allumer la pastille correspondante
     const targetSwatch = Array.from(document.querySelectorAll('.swatch')).find(sw => sw.style.backgroundImage.includes(savedBg));
     setBackground(savedBg, targetSwatch);
   }
@@ -938,7 +961,6 @@
     return null;
   }
 
-  // MODIFICATION : Fonction pour charger l'iframe Spotify
   function loadSpotifyEmbed(embedUrl) {
     const isTrack = embedUrl.includes('/track/');
     spotifyEmbedWrap.innerHTML = `<div class="spotify-embed-wrap"><iframe src="${embedUrl}" height="${isTrack ? 152 : 352}" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy"></iframe></div>`;
@@ -953,11 +975,9 @@
       return;
     }
     loadSpotifyEmbed(embedUrl);
-    // MODIFICATION : Sauvegarde de l'URL du lecteur
     localStorage.setItem('rituel_spotify', embedUrl);
   });
 
-  // MODIFICATION : Restauration du lecteur Spotify sauvegardé
   const savedSpotify = localStorage.getItem('rituel_spotify');
   if (savedSpotify) {
     loadSpotifyEmbed(savedSpotify);
