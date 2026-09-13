@@ -1080,7 +1080,8 @@
   function pad2(n){ return n.toString().padStart(2,'0'); }
   function isoDate(d){ return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate()); }
   function parseIsoDate(s){ const [y,m,day] = s.split('-').map(Number); return new Date(y, m-1, day); }
-  function currentWeekDates(){ const ws = startOfWeek(new Date()); return Array.from({length:7}, (_,i) => addDays(ws, i)); }
+  function currentWeekDates(){ const today = dateOnly(new Date()); return Array.from({length:7}, (_,i) => addDays(today, i)); }
+  function dayLabelShort(d){ return DAY_LABELS[(d.getDay()+6)%7]; }
   function starsStr(n){ return '★'.repeat(n) + '☆'.repeat(Math.max(0,5-n)); }
 
   /* ---------------- tasks ---------------- */
@@ -1104,7 +1105,7 @@
   let tasks = [];
   let taskIdSeq = 1;
   let selectedImportance = 3;
-  let cachedWeekStart = startOfWeek(new Date());
+  let cachedToday = dateOnly(new Date());
 
   function refreshDaySelect(){
     const dates = currentWeekDates();
@@ -1113,7 +1114,7 @@
     dates.forEach(d => {
       const opt = document.createElement('option');
       opt.value = isoDate(d);
-      opt.textContent = DAY_LABELS[dates.indexOf(d)] + ' ' + d.getDate();
+      opt.textContent = (isSameDay(d, today) ? "Aujourd'hui" : dayLabelShort(d)) + ' ' + d.getDate();
       if(isSameDay(d, today)) opt.selected = true;
       taskDaySelect.appendChild(opt);
     });
@@ -1154,9 +1155,9 @@
         changed = true;
       }
     });
-    const newWeekStart = startOfWeek(new Date());
-    if(newWeekStart.getTime() !== cachedWeekStart.getTime()){
-      cachedWeekStart = newWeekStart;
+    const newToday = dateOnly(new Date());
+    if(newToday.getTime() !== cachedToday.getTime()){
+      cachedToday = newToday;
       refreshDaySelect();
     }
     return changed;
@@ -1262,7 +1263,7 @@
 
       const header = document.createElement('div');
       header.className = 'week-day-header';
-      header.innerHTML = DAY_LABELS[i] + '<span class="num">' + d.getDate() + '</span>';
+      header.innerHTML = dayLabelShort(d) + '<span class="num">' + d.getDate() + '</span>';
       col.appendChild(header);
 
       const dayTasks = document.createElement('div');
