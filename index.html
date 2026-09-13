@@ -60,7 +60,7 @@
       radial-gradient(circle at 85% 80%, rgba(92,144,136,0.14), transparent 50%);
   }
 
-  /* ---------- app shell (fills screen, never scrolls) ---------- */
+  /* ---------- app shell ---------- */
   .app{
     position:relative;
     z-index:1;
@@ -69,7 +69,7 @@
     flex-direction:column;
   }
 
-  /* ---------- minimal topbar ---------- */
+  /* ---------- topbar ---------- */
   .topbar{
     position:fixed;
     top:22px; left:26px; right:26px;
@@ -144,7 +144,7 @@
   body.is-fullscreen .fullscreen-btn .icon-enter{ display:none; }
   body.is-fullscreen .fullscreen-btn .icon-exit{ display:block; }
 
-  /* ---------- hero timer, perfectly centered ---------- */
+  /* ---------- hero timer ---------- */
   .hero-wrap{
     flex:1;
     display:flex;
@@ -261,7 +261,7 @@
   }
   .custom-time input:focus{ outline:none; border-color:var(--mode-color); }
 
-  /* ---------- quote, quiet by default ---------- */
+  /* ---------- quote ---------- */
   .quote-block{
     max-width:460px;
     text-align:center;
@@ -289,10 +289,7 @@
   }
   .quote-actions button:hover{ color:var(--paper); border-color:var(--paper-faint); }
 
-  /* =====================================================
-     Taskbar zone: hides automatically, reveals near the
-     bottom edge of the screen (like an auto-hide OS taskbar)
-     ===================================================== */
+  /* ---------- taskbar zone ---------- */
   .taskbar-zone{
     position:fixed;
     left:0; right:0; bottom:0;
@@ -527,9 +524,7 @@
   .tasks li:hover .remove{ opacity:1; }
   .empty-tasks{ color:var(--paper-faint); font-size:0.82rem; font-style:italic; padding:6px 2px; }
 
-  /* =====================================================
-     Weekly calendar modal
-     ===================================================== */
+  /* ---------- weekly modal ---------- */
   .week-modal{
     display:none;
     position:fixed; inset:0; z-index:100;
@@ -618,7 +613,6 @@
   .wt-text{ margin-top:3px; cursor:pointer; word-break:break-word; }
   .wt-meta{ display:flex; justify-content:space-between; align-items:center; margin-top:5px; }
   .wt-duration{ font-size:0.6rem; color:var(--paper-faint); }
-  .wt-badge{ font-size:0.6rem; color:#ff9b7a; }
   .wt-actions{ display:flex; gap:6px; }
   .wt-actions button{
     background:none; border:none; color:var(--paper-faint);
@@ -632,7 +626,7 @@
     .week-grid{ grid-template-columns:repeat(7,minmax(90px,1fr)); overflow-x:auto; }
   }
 
-  /* background settings */
+  /* bg options */
   .bg-options{ display:flex; flex-direction:column; gap:9px; }
   .bg-upload{
     border:1px dashed var(--glass-border);
@@ -1078,7 +1072,10 @@
   function dayLabelShort(d){ return DAY_LABELS[(d.getDay()+6)%7]; }
   function starsStr(n){ return '★'.repeat(n) + '☆'.repeat(Math.max(0,5-n)); }
 
-  /* ---------------- tasks ---------------- */
+  /* ---------------- tasks & local storage ---------------- */
+  const STORAGE_KEY_TASKS = 'rituel_tasks_v1';
+  const STORAGE_KEY_SEQ = 'rituel_tasks_seq_v1';
+
   const taskForm = document.getElementById('taskForm');
   const taskInput = document.getElementById('taskInput');
   const taskDaySelect = document.getElementById('taskDay');
@@ -1100,6 +1097,33 @@
   let taskIdSeq = 1;
   let selectedImportance = 3;
   let cachedToday = dateOnly(new Date());
+
+  function saveTasksToStorage(){
+    try {
+      localStorage.setItem(STORAGE_KEY_TASKS, JSON.stringify(tasks));
+      localStorage.setItem(STORAGE_KEY_SEQ, taskIdSeq.toString());
+    } catch(e) {
+      console.error('Erreur lors de la sauvegarde des tâches', e);
+    }
+  }
+
+  function loadTasksFromStorage(){
+    try {
+      const savedTasks = localStorage.getItem(STORAGE_KEY_TASKS);
+      const savedSeq = localStorage.getItem(STORAGE_KEY_SEQ);
+      if(savedSeq) taskIdSeq = parseInt(savedSeq, 10) || 1;
+      if(savedTasks){
+        const parsed = JSON.parse(savedTasks);
+        tasks = parsed.map(t => ({
+          ...t,
+          dueDate: new Date(t.dueDate)
+        }));
+      }
+    } catch(e) {
+      console.error('Erreur lors de la récupération des tâches', e);
+      tasks = [];
+    }
+  }
 
   function refreshDaySelect(){
     const dates = currentWeekDates();
@@ -1168,9 +1192,10 @@
   }
 
   function refreshAll(){
-    autoShiftOverdue();
+    const changed = autoShiftOverdue();
     renderTasks();
     renderWeek();
+    saveTasksToStorage();
   }
 
   function renderTasks(){
@@ -1249,7 +1274,7 @@
     const today = dateOnly(new Date());
     const recommendedIds = new Set(getRecommended(3).map(t => t.id));
 
-    dates.forEach((d, i) => {
+    dates.forEach((d) => {
       const col = document.createElement('div');
       col.className = 'week-day-col' + (isSameDay(d, today) ? ' is-today' : '');
 
@@ -1360,8 +1385,11 @@
 
   document.getElementById('dockTasks').addEventListener('mouseenter', () => refreshAll());
 
+  // Charger les tâches au démarrage
+  loadTasksFromStorage();
   refreshAll();
-  setInterval(() => { if(autoShiftOverdue()){ renderTasks(); renderWeek(); } }, 5 * 60 * 1000);
+
+  setInterval(() => { if(autoShiftOverdue()){ refreshAll(); } }, 5 * 60 * 1000);
 
   /* ---------------- quotes ---------------- */
   const quotes = [
@@ -1392,7 +1420,7 @@
     }
   });
 
-  /* ---------------- background (Persistant avec IndexedDB) ---------------- */
+  /* ---------------- background (IndexedDB) ---------------- */
   const DB_NAME = 'RituelBgDB';
   const DB_VERSION = 1;
   const STORE_NAME = 'settings';
@@ -1478,7 +1506,6 @@
     }
   }
 
-  // Restauration automatique au chargement
   loadBgFromDB().then(savedUrl => {
     if(savedUrl){
       const activeSwatch = Array.from(document.querySelectorAll('.swatch')).find(s => s.dataset.url === savedUrl);
@@ -1555,7 +1582,7 @@
   });
   document.addEventListener('fullscreenchange', updateFsState);
 
-  /* ---------------- docks: tap-to-pin on touch devices ---------------- */
+  /* ---------------- docks tactile ---------------- */
   const docks = document.querySelectorAll('.dock');
   const isTouch = window.matchMedia('(hover: none)').matches;
   if(isTouch){
