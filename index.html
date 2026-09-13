@@ -125,6 +125,25 @@
     font-weight:600;
   }
 
+  .topbar-right{ display:flex; align-items:center; gap:10px; }
+  .fullscreen-btn{
+    width:38px; height:38px;
+    border-radius:50%;
+    background:var(--glass);
+    border:1px solid var(--glass-border);
+    backdrop-filter:blur(14px);
+    -webkit-backdrop-filter:blur(14px);
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer;
+    transition:background .2s ease, transform .15s ease;
+    flex-shrink:0;
+  }
+  .fullscreen-btn:hover{ background:var(--glass-strong); transform:translateY(-1px); }
+  .fullscreen-btn svg{ width:16px; height:16px; }
+  .fullscreen-btn .icon-exit{ display:none; }
+  body.is-fullscreen .fullscreen-btn .icon-enter{ display:none; }
+  body.is-fullscreen .fullscreen-btn .icon-exit{ display:block; }
+
   /* ---------- hero timer, perfectly centered ---------- */
   .hero-wrap{
     flex:1;
@@ -271,10 +290,21 @@
   .quote-actions button:hover{ color:var(--paper); border-color:var(--paper-faint); }
 
   /* =====================================================
-     Taskbar: bottom bar, icons bloom into panels on hover
+     Taskbar zone: hides automatically, reveals near the
+     bottom edge of the screen (like an auto-hide OS taskbar)
      ===================================================== */
+  .taskbar-zone{
+    position:fixed;
+    left:0; right:0; bottom:0;
+    height:58px;
+    z-index:35;
+    display:flex;
+    align-items:flex-end;
+    justify-content:center;
+  }
   .taskbar{
-    flex:0 0 auto;
+    position:relative;
+    width:100%;
     display:flex;
     align-items:center;
     justify-content:center;
@@ -284,7 +314,25 @@
     border-top:1px solid var(--glass-border);
     backdrop-filter:blur(18px);
     -webkit-backdrop-filter:blur(18px);
-    z-index:30;
+    transform:translateY(calc(100% - 10px));
+    transition:transform .32s cubic-bezier(.4,0,.2,1);
+  }
+  .taskbar::after{
+    content:"";
+    position:absolute;
+    bottom:4px; left:50%;
+    transform:translateX(-50%);
+    width:34px; height:4px;
+    border-radius:2px;
+    background:rgba(245,241,232,0.4);
+  }
+  .taskbar-zone:hover .taskbar,
+  .taskbar-zone.pinned .taskbar{
+    transform:translateY(0);
+  }
+  @media (hover:none){
+    .taskbar{ transform:translateY(0); }
+    .taskbar::after{ display:none; }
   }
 
   .dock{
@@ -701,10 +749,20 @@
       <div class="time" id="clockTime">--:--</div>
       <div class="date" id="clockDate">—</div>
     </div>
-    <div class="modes" id="modeButtons">
-      <button class="mode-btn active" data-mode="focus">Concentration</button>
-      <button class="mode-btn" data-mode="short">Pause courte</button>
-      <button class="mode-btn" data-mode="long">Pause longue</button>
+    <div class="topbar-right">
+      <div class="modes" id="modeButtons">
+        <button class="mode-btn active" data-mode="focus">Concentration</button>
+        <button class="mode-btn" data-mode="short">Pause courte</button>
+        <button class="mode-btn" data-mode="long">Pause longue</button>
+      </div>
+      <button class="fullscreen-btn" id="fullscreenBtn" title="Plein écran">
+        <svg class="icon-enter" viewBox="0 0 24 24" fill="none" stroke="#f5f1e8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/>
+        </svg>
+        <svg class="icon-exit" viewBox="0 0 24 24" fill="none" stroke="#f5f1e8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 3v3a2 2 0 0 1-2 2H4M15 3v3a2 2 0 0 0 2 2h3M9 21v-3a2 2 0 0 0-2-2H4M15 21v-3a2 2 0 0 1 2-2h3"/>
+        </svg>
+      </button>
     </div>
   </div>
 
@@ -744,7 +802,8 @@
     </div>
   </div>
 
-  <!-- ---------------- taskbar ---------------- -->
+  <!-- ---------------- taskbar (auto-hide near bottom edge) ---------------- -->
+  <div class="taskbar-zone" id="taskbarZone">
   <div class="taskbar">
 
     <div class="dock" id="dockTasks">
@@ -829,6 +888,7 @@
       </div>
     </div>
 
+  </div>
   </div>
 
   <!-- ---------------- weekly calendar modal ---------------- -->
@@ -1422,6 +1482,20 @@
     }
     spotifyEmbedWrap.innerHTML = `<div class="spotify-embed-wrap"><iframe src="${embedUrl}" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy"></iframe></div>`;
   });
+
+  /* ---------------- fullscreen ---------------- */
+  const fullscreenBtn = document.getElementById('fullscreenBtn');
+  function updateFsState(){
+    document.body.classList.toggle('is-fullscreen', !!document.fullscreenElement);
+  }
+  fullscreenBtn.addEventListener('click', () => {
+    if(!document.fullscreenElement){
+      document.documentElement.requestFullscreen().catch(() => {});
+    } else {
+      document.exitFullscreen().catch(() => {});
+    }
+  });
+  document.addEventListener('fullscreenchange', updateFsState);
 
   /* ---------------- docks: tap-to-pin on touch devices ---------------- */
   const docks = document.querySelectorAll('.dock');
