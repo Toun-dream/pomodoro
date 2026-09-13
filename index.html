@@ -357,7 +357,7 @@
 
   .dock-panel{
     position:absolute;
-    bottom:calc(100% - 1px); /* touches the icon's top edge: no dead zone for the cursor */
+    bottom:calc(100% - 1px);
     left:50%;
     transform:translateX(-50%) scale(.9);
     transform-origin:50% 100%;
@@ -384,7 +384,6 @@
     transform:translateX(-50%) scale(1);
   }
 
-  /* keep edge panels on-screen: anchor to the icon's edge instead of its center */
   .dock:first-child .dock-panel{ left:0; transform:translateX(0) scale(.9); transform-origin:0% 100%; }
   .dock:first-child:hover .dock-panel, .dock:first-child.pinned .dock-panel{ transform:translateX(0) scale(1); }
   .dock:last-child .dock-panel{ left:auto; right:0; transform:translateX(0) scale(.9); transform-origin:100% 100%; }
@@ -413,7 +412,6 @@
     font-weight:500;
   }
 
-  /* recommendation banner */
   .recommend-banner{
     background:rgba(227,168,87,0.12);
     border:1px solid rgba(227,168,87,0.35);
@@ -430,7 +428,6 @@
   .recommend-banner .rb-text{ color:var(--paper); }
   .recommend-banner .rb-stars{ color:var(--amber); margin-left:5px; letter-spacing:1px; }
 
-  /* task add form: text + day/time + duration/importance/submit */
   .task-fields{ display:flex; flex-direction:column; gap:6px; margin-bottom:10px; flex:0 0 auto; }
   .task-fields input[type="text"]{
     background:rgba(245,241,232,0.07);
@@ -490,7 +487,6 @@
   }
   .week-toggle-btn:hover{ color:var(--paper); border-color:var(--mode-color); }
 
-  /* tasks */
   .tasks{ list-style:none; margin:0; padding:0; flex:1; min-height:0; overflow-y:auto; }
   .tasks li{
     display:flex;
@@ -726,8 +722,6 @@
     .ring-progress, #bg, .dock-icon, .dock-panel{ transition:none; }
   }
 
-  /* Touch devices: no hover, so tapping the icon pins the panel open;
-     tap the icon again (or elsewhere handled in JS) to close. */
   @media (hover:none){
     .dock-panel{ transition:opacity .18s ease, transform .18s ease; }
   }
@@ -802,7 +796,7 @@
     </div>
   </div>
 
-  <!-- ---------------- taskbar (auto-hide near bottom edge) ---------------- -->
+  <!-- ---------------- taskbar ---------------- -->
   <div class="taskbar-zone" id="taskbarZone">
   <div class="taskbar">
 
@@ -1134,8 +1128,6 @@
   }
   updateImportancePickerUI();
 
-  /* tasks overdue (and not done) automatically slide to this week's Saturday,
-     gaining one point of importance each time they get bumped */
   function autoShiftOverdue(){
     const today = dateOnly(new Date());
     let changed = false;
@@ -1400,7 +1392,57 @@
     }
   });
 
-  /* ---------------- background ---------------- */
+  /* ---------------- background (Persistant avec IndexedDB) ---------------- */
+  const DB_NAME = 'RituelBgDB';
+  const DB_VERSION = 1;
+  const STORE_NAME = 'settings';
+
+  function openBgDB(){
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, DB_VERSION);
+      req.onupgradeneeded = e => {
+        const db = e.target.result;
+        if(!db.objectStoreNames.contains(STORE_NAME)){
+          db.createObjectStore(STORE_NAME);
+        }
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async function saveBgToDB(urlData){
+    try {
+      const db = await openBgDB();
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      tx.objectStore(STORE_NAME).put(urlData, 'bg_image');
+    } catch(e) {
+      console.error('Erreur sauvegarde fond d\'écran', e);
+    }
+  }
+
+  async function loadBgFromDB(){
+    try {
+      const db = await openBgDB();
+      return new Promise((resolve) => {
+        const tx = db.transaction(STORE_NAME, 'readonly');
+        const req = tx.objectStore(STORE_NAME).get('bg_image');
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => resolve(null);
+      });
+    } catch(e) {
+      return null;
+    }
+  }
+
+  async function clearBgFromDB(){
+    try {
+      const db = await openBgDB();
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      tx.objectStore(STORE_NAME).delete('bg_image');
+    } catch(e){}
+  }
+
   const bg = document.getElementById('bg');
   const bgUpload = document.getElementById('bgUpload');
   const bgUrlInput = document.getElementById('bgUrlInput');
@@ -1415,20 +1457,34 @@
     'https://images.unsplash.com/photo-1470252649378-9c29740c9fa8?w=800&q=60',
     'https://images.unsplash.com/photo-1519681393784-d120267933ba?w=800&q=60'
   ];
+
   presetImages.forEach(url => {
     const sw = document.createElement('div');
     sw.className = 'swatch';
+    sw.dataset.url = url;
     sw.style.backgroundImage = `url(${url})`;
     sw.addEventListener('click', () => setBackground(url, sw));
     swatchesWrap.appendChild(sw);
   });
 
-  function setBackground(url, activeEl){
+  function setBackground(url, activeEl, save = true){
     bg.classList.remove('no-image');
-    bg.style.backgroundImage = `url(${url})`;
+    bg.style.backgroundImage = `url("${url}")`;
     document.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
     if(activeEl) activeEl.classList.add('active');
+
+    if(save){
+      saveBgToDB(url);
+    }
   }
+
+  // Restauration automatique au chargement
+  loadBgFromDB().then(savedUrl => {
+    if(savedUrl){
+      const activeSwatch = Array.from(document.querySelectorAll('.swatch')).find(s => s.dataset.url === savedUrl);
+      setBackground(savedUrl, activeSwatch, false);
+    }
+  });
 
   bgUpload.addEventListener('change', e => {
     const file = e.target.files[0];
@@ -1450,6 +1506,7 @@
     bg.classList.add('no-image');
     bg.style.backgroundImage = 'none';
     document.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
+    clearBgFromDB();
   });
 
   /* ---------------- spotify embed ---------------- */
